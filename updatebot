@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ################################################################################
-# Version 1.2.0-RELEASE (28-01-2023)
+# Version 1.3.0-RELEASE (22-07-2023)
 ################################################################################
 
 ################################################################################
@@ -20,7 +20,7 @@
 ################################################################################
 
 # updatebot version
-UPDATEBOT_VERSION='1.2.0'
+UPDATEBOT_VERSION='1.3.0'
 
 # commands
 FREEBSD_UPDATE="$(command -v freebsd-update)"
@@ -177,23 +177,42 @@ feature_freebsd() {
 }
 
 feature_iocage() {
-    printf "%bupdatebot will update the following jails:%b\n" "${BOLD}" "${NC}"
-    printf "${YELLOW}"
-    ${IOCAGE} list --quick --header | awk '{print $1;}'
-    printf "${NC}"
-    printf "\n%b(1/4) updating base jail systems to latest patch level:%b\n" "${BOLD}" "${NC}"
-    ${IOCAGE} update ALL
-    printf "\n%b(2/4) updating local package repositories to latest version:%b\n" "${BOLD}" "${NC}"
-    ${IOCAGE} exec ALL ${PKG} update
-    printf "\n%b(3/4) upgrading packages to latest versions:%b\n" "${BOLD}" "${NC}"
-    ${IOCAGE} exec ALL ${PKG} upgrade --yes
-    printf "\n%b(4/4) restarting jails:%b\n" "${BOLD}" "${NC}"
-    ${IOCAGE} stop ALL
-    sleep 2
-    ${IOCAGE} start ALL
-    printf "\n%bAll done! \\\( ^ ᴗ ^ )/%b\n" "${BOLD}" "${NC}"
-    printf "\n%bJail overview:%b\n" "${BOLD}" "${NC}"
-    ${IOCAGE} list --long
+    printf "%bupdatebot will try to update the following jails:%b\n" "${YELLOW}" "${NC}"
+    "${IOCAGE}" list --header | while read line; do
+        STATUS="$(echo ${line} | awk '{print $3;}')"
+        JAIL="$(echo ${line} | awk '{print $2;}')"
+        if [ "${STATUS}" = 'up' ]; then
+            printf "%s\n" "${JAIL}"
+        fi
+    done
+    printf "\nWaiting 5 seconds before initiating updates. Press ctrl + c to cancel.\n\n"
+    sleep 5
+
+    "${IOCAGE}" list --header | while read line; do
+        STATUS="$(echo ${line} | awk '{print $3;}')"
+        JAIL="$(echo ${line} | awk '{print $2;}')"
+        if [ "${STATUS}" = 'up' ]; then
+            printf "\n%bUPDATING: %s%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+            printf "%b(1/4) Updating %s to latest patch level%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+            "${IOCAGE}" update "${JAIL}"
+            printf "\n%b(2/4) Updating %s local package repositories to latest version%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+            "${IOCAGE}" exec "${JAIL}" "${PKG}" update
+            printf "\n%b(3/4) Upgrading %s packages to latest versions%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+            "${IOCAGE}" exec "${JAIL}" "${PKG}" upgrade --yes
+            printf "\n%b(4/4) Restarting %s%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+            "${IOCAGE}" stop "${JAIL}"
+            sleep 1
+            "${IOCAGE}" start "${JAIL}"
+        elif [ "${STATUS}" = 'down' ]; then
+            printf "%bSKIPPING (DOWN): %s%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+        else
+            printf "%bSKIPPING (UNKNOWN): %s%b\n" "${YELLOW}" "${JAIL}" "${NC}"
+        fi
+    done
+
+    printf "\n\n%bAll done! \\\( ^ ᴗ ^ )/%b\n" "${YELLOW}" "${NC}"
+    printf "\n%bJail overview:%b\n\n" "${YELLOW}" "${NC}"
+    "${IOCAGE}" list --long
 }
 
 feature_iocage_snapshot() {
